@@ -1,0 +1,191 @@
+import 'reflect-metadata';
+import { spawn } from 'node:child_process';
+import { createRequire } from 'node:module';
+import { dirname, relative } from 'node:path';
+import process from 'node:process';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import chalk from 'chalk';
+import { Command } from 'commander';
+import { register } from 'tsx/esm/api';
+import { printModuleReport, printRunSummary } from '../reporter/report.js';
+import { drainGlobalLogs } from '../runner/console-proxy.js';
+import type { ModuleResult } from '../runner/run-module.js';
+import { runModule } from '../runner/run-module.js';
+import { mapWithConcurrency } from '../runner/semaphore.js';
+import { discover, listAll } from './discover.js';
+import { findConfigPath, loadConfig, resolveTsconfig } from './load-config.js';
+import { loadModule } from './load-module.js';
+import { mountDashboard } from './tui/dashboard.js';
+import { RunStore } from './tui/store.js';
+
+const TSX_SENTINEL = '__AI_TESTING_TSX';
+const DEFAULT_JOBS = 4;
+
+/**
+ * Loading project TypeScript (config + `.eval.ts`) that imports a CommonJS-typed backend
+ * works cleanly only under a GLOBALLY registered tsx (`node --import tsx`). So the parent
+ * process re-execs itself once under `--import <tsx loader>` (see plan / memory notes).
+ */
+function reExecUnderTsx(): Promise<number> {
+  const require = createRequire(import.meta.url);
+  const tsxLoader = require.resolve('tsx'); // → tsx/dist/loader.mjs
+  const self = fileURLToPath(import.meta.url);
+
+  const cwd = process.cwd();
+  const configPath = findConfigPath(cwd);
+  const root = configPath ? dirname(configPath) : cwd;
+  const flagIdx = process.argv.indexOf('--tsconfig');
+  const tsconfig = resolveTsconfig(root, flagIdx >= 0 ? process.argv[flagIdx + 1] : undefined);
+
+  const env: NodeJS.ProcessEnv = { ...process.env, [TSX_SENTINEL]: '1' };
+  if (tsconfig) env.TSX_TSCONFIG_PATH = tsconfig;
+
+  const child = spawn(
+    process.execPath,
+    ['--import', pathToFileURL(tsxLoader).href, self, ...process.argv.slice(2)],
+    { stdio: 'inherit', env },
+  );
+  return new Promise((resolve) => {
+    child.on('exit', (code, signal) => resolve(signal ? 1 : (code ?? 1)));
+    child.on('error', (err) => {
+      console.error(chalk.red('failed to start loader:'), err);
+      resolve(1);
+    });
+  });
+}
+
+const passedCount = (r: ModuleResult) => r.metrics.filter((m) => m.pass).length;
+
+/** Real work — runs in the child, where tsx is globally registered. */
+async function run(): Promise<number> {
+  const program = new Command();
+  program
+    .name('ai-eval')
+    .description('Standalone eval runner for LangChain modules (.eval.ts).')
+    .argument('[selectors...]', 'file-name substrings or paths to run')
+    .option('-a, --all', 'run every discovered .eval.ts')
+    .option('-j, --jobs <n>', 'max modules to run in parallel', (v) => Number.parseInt(v, 10))
+    .option('-t, --threshold <n>', 'override all metric thresholds (0..1)', (v) => Number.parseFloat(v))
+    .option('-c, --concurrency <n>', 'max concurrent cases per module', (v) => Number.parseInt(v, 10))
+    .option('--tsconfig <path>', 'tsconfig used by the loader (alias/path resolution)')
+    .option('--list', 'list discovered modules and exit')
+    .option('--no-tui', 'disable the live dashboard (plain output)')
+    .option('--no-fail', 'always exit 0 (ignore below-threshold)')
+    .allowExcessArguments(false)
+    .parse();
+
+  const opts = program.opts<{
+    all?: boolean;
+    jobs?: number;
+    threshold?: number;
+    concurrency?: number;
+    list?: boolean;
+    tui?: boolean;
+    fail?: boolean;
+  }>();
+  const selectors = program.args;
+  const cwd = process.cwd();
+  const configPath = findConfigPath(cwd);
+  const root = configPath ? dirname(configPath) : cwd;
+
+  const { config } = await loadConfig(cwd);
+  if (opts.concurrency && Number.isFinite(opts.concurrency)) {
+    config.defaults = { ...config.defaults, concurrency: opts.concurrency };
+  }
+  if (opts.fail === false) config.defaults = { ...config.defaults, failOnBelowThreshold: false };
+  const thresholdOverride =
+    opts.threshold !== undefined && Number.isFinite(opts.threshold) ? opts.threshold : undefined;
+  const jobs = opts.jobs && opts.jobs > 0 ? opts.jobs : DEFAULT_JOBS;
+  const patterns = config.testMatch;
+
+  if (opts.list) {
+    const files = await listAll(root, patterns);
+    console.log(chalk.bold(`\n${files.length} module(s) under ${root}:`));
+    for (const f of files) console.log('  ' + relative(root, f));
+    return 0;
+  }
+
+  const files = await discover({ root, selectors, all: Boolean(opts.all), patterns });
+  if (files.length === 0) {
+    const available = await listAll(root, patterns);
+    if (selectors.length) console.log(chalk.yellow(`\nNo modules matched: ${selectors.join(', ')}`));
+    console.log(chalk.dim(`Pass a name, or \`ai-eval --all\`. ${available.length} module(s) available:`));
+    for (const f of available.slice(0, 50)) console.log('  ' + relative(root, f));
+    if (available.length > 50) console.log(chalk.dim(`  … ${available.length - 50} more`));
+    return selectors.length ? 1 : 0;
+  }
+
+  await config.setup?.();
+  const callbacks = (await config.tracing?.()) ?? [];
+
+  const tui = Boolean(process.stdout.isTTY) && opts.tui !== false;
+  const store = new RunStore();
+  for (const file of files) store.init(file, relative(root, file));
+  const dashboard = tui ? mountDashboard(store) : undefined;
+
+  const loadErrors: Array<{ file: string; error: Error }> = [];
+  let results: Array<ModuleResult | null> = [];
+  try {
+    results = await mapWithConcurrency(files, jobs, async (file) => {
+      let mod;
+      try {
+        mod = await loadModule(file);
+      } catch (e) {
+        loadErrors.push({ file, error: e as Error });
+        store.fail(file);
+        return null;
+      }
+      store.rename(file, mod.name);
+      const result = await runModule(mod, {
+        config,
+        callbacks,
+        thresholdOverride,
+        onStart: (total) => store.start(file, total),
+        onCaseDone: () => store.tick(file),
+      });
+      store.finish(file, {
+        failed: result.failed,
+        metricsTotal: result.metrics.length,
+        metricsPassed: passedCount(result),
+      });
+      if (!tui) {
+        const tag = result.failed ? chalk.red('✗') : chalk.green('✓');
+        process.stderr.write(`  ${tag} ${mod.name} (${passedCount(result)}/${result.metrics.length})\n`);
+      }
+      return result;
+    });
+  } finally {
+    if (dashboard) {
+      dashboard.unmount();
+      await dashboard.waitUntilExit();
+    }
+    await config.teardown?.();
+  }
+
+  // Flush any logs emitted during the run but outside a case (rare).
+  const stray = drainGlobalLogs();
+  if (stray.length) {
+    console.log(chalk.dim(`\n— ${stray.length} log line(s) emitted outside a case —`));
+    for (const l of stray) console.log('  ', ...l.args);
+  }
+  for (const { file, error } of loadErrors) {
+    console.error(chalk.red(`\n✗ failed to load ${relative(root, file)}: ${error.message}`));
+  }
+
+  const moduleResults = results.filter((r): r is ModuleResult => r !== null);
+  for (const r of moduleResults) printModuleReport(r, config);
+  printRunSummary(moduleResults);
+
+  const hasErrors = loadErrors.length > 0 || moduleResults.some((r) => r.cases.some((c) => c.error));
+  const hasBelow = moduleResults.some((r) => r.metrics.some((m) => !m.pass));
+  const failOnBelow = config.defaults?.failOnBelowThreshold ?? true;
+  return hasErrors || (failOnBelow && hasBelow) ? 1 : 0;
+}
+
+const entry = process.env[TSX_SENTINEL] ? run() : reExecUnderTsx();
+entry
+  .then((code) => process.exit(code))
+  .catch((err) => {
+    console.error(chalk.red('ai-eval crashed:'), err);
+    process.exit(1);
+  });

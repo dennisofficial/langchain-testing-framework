@@ -1,0 +1,70 @@
+{
+  "name": "@workspace/ai-testing",
+  "version": "3.2.0",
+  "description": "Standalone CLI eval runner for LangChain chains/agents. Define a module, run it, see a score table with below-threshold case dumps. Tracing is optional via ai-testing.config.ts.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./src/index.ts",
+  "bin": {
+    "ai-eval": "./dist/cli/bin.js"
+  },
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./src/index.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./src/index.ts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./config": {
+      "import": {
+        "types": "./src/config.ts",
+        "default": "./dist/config.js"
+      },
+      "require": {
+        "types": "./src/config.ts",
+        "default": "./dist/config.cjs"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "agentevals": "^0.0.7",
+    "chalk": "^5.4.1",
+    "cli-table3": "^0.6.5",
+    "commander": "^12.1.0",
+    "glob": "^11.0.0",
+    "ink": "^5.1.0",
+    "openevals": "^0.1.0",
+    "pretty-ms": "^9.2.0",
+    "react": "^18.3.1",
+    "reflect-metadata": "^0.2.2",
+    "tsx": "^4.19.0"
+  },
+  "peerDependencies": {
+    "@langchain/core": ">=1.0.0"
+  },
+  "devDependencies": {
+    "@langchain/core": "^1.1.39",
+    "@types/node": "^20.19.0",
+    "@types/react": "^18.3.12",
+    "tsup": "^8.5.0",
+    "typescript": "^5.7.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

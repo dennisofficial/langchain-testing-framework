@@ -117,13 +117,39 @@ export function printRunSummary(results: ModuleResult[]): { failed: boolean } {
   }
   console.log(
     chalk.red.bold(
-      `  ✗ ${failedModules.length}/${results.length} module(s) failed — ${failedMetrics}/${totalMetrics} metrics below threshold`,
+      `  ✗ ${failedModules.length}/${results.length} module(s) failed — ${failedMetrics}/${totalMetrics} metrics below threshold\n`,
     ),
   );
+
+  const table = new Table({
+    head: ['module', 'failing metric', 'avg', 'threshold'].map((h) => chalk.dim(h)),
+    style: { head: [], border: ['gray'] },
+    colAligns: ['left', 'left', 'right', 'right'],
+  });
   for (const r of failedModules) {
-    const failing = r.metrics.filter((m) => !m.pass).map((m) => `${m.key} ${pct(m.avg)}`);
-    const errored = r.cases.some((c) => c.error) ? ' +case errors' : '';
-    console.log(chalk.red(`    · ${r.name}: ${failing.join(', ') || 'case errors'}${errored}`));
+    const failing = r.metrics.filter((m) => !m.pass);
+    const erroredCases = r.cases.filter((c) => c.error).length;
+    let firstRow = true;
+    for (const m of failing) {
+      table.push([
+        firstRow ? r.name : '',
+        chalk.red(m.key),
+        chalk.red(pct(m.avg)),
+        chalk.dim(`≥ ${pct(m.threshold)}`),
+      ]);
+      firstRow = false;
+    }
+    if (erroredCases > 0) {
+      const label = `${erroredCases} case error${erroredCases > 1 ? 's' : ''}`;
+      table.push([firstRow ? r.name : '', chalk.red(label), chalk.dim('—'), chalk.dim('—')]);
+    }
   }
+  console.log(
+    table
+      .toString()
+      .split('\n')
+      .map((l) => `  ${l}`)
+      .join('\n'),
+  );
   return { failed: true };
 }

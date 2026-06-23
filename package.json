@@ -1,6 +1,6 @@
 {
   "name": "@workspace/ai-testing",
-  "version": "3.3.0",
+  "version": "3.4.0",
   "description": "Standalone CLI eval runner for LangChain chains/agents. Define a module, run it, see a score table with below-threshold case dumps. Tracing is optional via ai-testing.config.ts.",
   "type": "module",
   "main": "./dist/index.js",

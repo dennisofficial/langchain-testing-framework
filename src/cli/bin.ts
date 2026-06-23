@@ -57,6 +57,53 @@ function reExecUnderTsx(): Promise<number> {
 
 const passedCount = (r: ModuleResult) => r.metrics.filter((m) => m.pass).length;
 
+/**
+ * `--check`: load every module and validate its dataset/runnable/evaluators WITHOUT running
+ * any case (no LLM calls). Catches broken imports, bad default exports, empty datasets, and
+ * runnables that aren't invokable — the cheap gate for a freshly written/migrated .eval.ts.
+ */
+async function checkModules(files: string[], root: string, jobs: number): Promise<number> {
+  const sema = new Sema(jobs);
+  let failed = 0;
+  await Promise.all(
+    files.map(async (file) => {
+      await sema.acquire();
+      try {
+        const mod = await loadModule(file);
+        const dataset = await mod.dataset();
+        const runnable = await mod.runnable();
+        const problem =
+          !Array.isArray(dataset) || dataset.length === 0
+            ? 'empty or non-array dataset'
+            : !runnable || typeof runnable.invoke !== 'function'
+              ? 'runnable() did not return something with .invoke()'
+              : !Array.isArray(mod.evaluators) || mod.evaluators.length === 0
+                ? 'no evaluators'
+                : undefined;
+        if (problem) {
+          failed += 1;
+          console.log(`  ${chalk.red('✗')} ${relative(root, file)} — ${problem}`);
+        } else {
+          console.log(
+            `  ${chalk.green('✓')} ${mod.name} ${chalk.dim(`(${dataset.length} cases, ${mod.evaluators.length} evaluators)`)}`,
+          );
+        }
+      } catch (e) {
+        failed += 1;
+        console.log(`  ${chalk.red('✗')} ${relative(root, file)} — ${(e as Error).message}`);
+      } finally {
+        sema.release();
+      }
+    }),
+  );
+  console.log(
+    failed
+      ? chalk.red(`\n${failed}/${files.length} module(s) failed to load`)
+      : chalk.green(`\n✓ all ${files.length} module(s) load cleanly`),
+  );
+  return failed ? 1 : 0;
+}
+
 /** Real work — runs in the child, where tsx is globally registered. */
 async function run(): Promise<number> {
   const program = new Command();
@@ -70,6 +117,7 @@ async function run(): Promise<number> {
     .option('-t, --threshold <n>', 'override all metric thresholds (0..1)', (v) => Number.parseFloat(v))
     .option('--tsconfig <path>', 'tsconfig used by the loader (alias/path resolution)')
     .option('--list', 'list discovered modules and exit')
+    .option('--check', 'validate modules load (dataset/runnable/evaluators), no LLM calls')
     .option('--no-tui', 'disable the live dashboard (plain output)')
     .option('--no-fail', 'always exit 0 (ignore below-threshold)')
     .allowExcessArguments(false)
@@ -81,6 +129,7 @@ async function run(): Promise<number> {
     threshold?: number;
     concurrency?: number;
     list?: boolean;
+    check?: boolean;
     tui?: boolean;
     fail?: boolean;
   }>();
@@ -119,6 +168,15 @@ async function run(): Promise<number> {
   }
 
   await config.setup?.();
+
+  if (opts.check) {
+    try {
+      return await checkModules(files, root, jobs);
+    } finally {
+      await config.teardown?.();
+    }
+  }
+
   const callbacks = (await config.tracing?.()) ?? [];
 
   const tui = Boolean(process.stdout.isTTY) && opts.tui !== false;

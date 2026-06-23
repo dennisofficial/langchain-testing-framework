@@ -1,7 +1,7 @@
 import type { AIConfig } from '../config.js';
 import type { EvalCase, EvalModule, EvalScore, Evaluator } from '../types.js';
 import { type CapturedLog, installConsoleCapture, restoreConsole, withCaseCapture } from './console-proxy.js';
-import { mapWithConcurrency } from './semaphore.js';
+import type { Sema } from 'async-sema';
 
 export interface CaseResult<In = unknown, Out = unknown> {
   index: number;
@@ -35,9 +35,11 @@ export interface ModuleResult {
 export interface RunModuleOptions {
   config: AIConfig;
   callbacks?: unknown[];
+  /** Shared global case limiter — caps total in-flight cases across ALL modules. */
+  sema: Sema;
   /** From `--threshold`; overrides every metric's threshold when set. */
   thresholdOverride?: number;
-  /** Called once after the dataset resolves, before cases run (to size a progress bar). */
+  /** Called once after the dataset resolves, before cases run (to size the dashboard row). */
   onStart?: (total: number) => void;
   onCaseDone?: (done: number, total: number) => void;
 }
@@ -60,13 +62,12 @@ export async function runModule<In, Out>(
   mod: EvalModule<In, Out>,
   opts: RunModuleOptions,
 ): Promise<ModuleResult> {
-  const { config, callbacks, thresholdOverride, onStart, onCaseDone } = opts;
+  const { config, callbacks, sema, thresholdOverride, onStart, onCaseDone } = opts;
   const start = Date.now();
 
   const dataset = (await mod.dataset()) as EvalCase<In, Out>[];
   onStart?.(dataset.length);
   const runnable = await mod.runnable();
-  const concurrency = mod.concurrency ?? config.defaults?.concurrency ?? 3;
   const target =
     callbacks && callbacks.length && runnable.withConfig
       ? runnable.withConfig({ callbacks })
@@ -76,44 +77,51 @@ export async function runModule<In, Out>(
   let done = 0;
   let cases: CaseResult<In, Out>[];
   try {
-    cases = await mapWithConcurrency(dataset, concurrency, async (caseDef, index) => {
-      const logs: CapturedLog[] = [];
-      let output: Out | undefined;
-      let error: Error | undefined;
-      let scores: EvalScore[] = [];
-
-      // Capture invoke AND evaluator logs together so nothing reaches the live TUI.
-      await withCaseCapture(logs, async () => {
+    // Every case acquires from the SHARED limiter, so total in-flight cases across all
+    // modules is capped globally (the rate-limit knob), not per-module.
+    cases = await Promise.all(
+      dataset.map(async (caseDef, index) => {
+        await sema.acquire();
+        const logs: CapturedLog[] = [];
+        let output: Out | undefined;
+        let error: Error | undefined;
+        let scores: EvalScore[] = [];
         try {
-          output = await target.invoke(caseDef.input);
-        } catch (e) {
-          error = asError(e);
-          return;
-        }
-        const ctx = {
-          input: caseDef.input,
-          output: output as Out,
-          expected: caseDef.expected,
-          label: caseDef.label,
-          index,
-        };
-        const perEvaluator = await Promise.all(
-          mod.evaluators.map(async (ev) => {
+          // Capture invoke AND evaluator logs together so nothing reaches the live TUI.
+          await withCaseCapture(logs, async () => {
             try {
-              return normalizeScores(await ev(ctx), ev);
+              output = await target.invoke(caseDef.input);
             } catch (e) {
-              return [
-                { key: ev.evalMeta?.key ?? 'evaluator-error', grade: 0, comment: asError(e).message },
-              ] as EvalScore[];
+              error = asError(e);
+              return;
             }
-          }),
-        );
-        scores = perEvaluator.flat();
-      });
-
-      onCaseDone?.(++done, dataset.length);
-      return { index, label: caseDef.label, input: caseDef.input, expected: caseDef.expected, output, error, scores, logs };
-    });
+            const ctx = {
+              input: caseDef.input,
+              output: output as Out,
+              expected: caseDef.expected,
+              label: caseDef.label,
+              index,
+            };
+            const perEvaluator = await Promise.all(
+              mod.evaluators.map(async (ev) => {
+                try {
+                  return normalizeScores(await ev(ctx), ev);
+                } catch (e) {
+                  return [
+                    { key: ev.evalMeta?.key ?? 'evaluator-error', grade: 0, comment: asError(e).message },
+                  ] as EvalScore[];
+                }
+              }),
+            );
+            scores = perEvaluator.flat();
+          });
+        } finally {
+          sema.release();
+          onCaseDone?.(++done, dataset.length);
+        }
+        return { index, label: caseDef.label, input: caseDef.input, expected: caseDef.expected, output, error, scores, logs };
+      }),
+    );
   } finally {
     restoreConsole();
   }

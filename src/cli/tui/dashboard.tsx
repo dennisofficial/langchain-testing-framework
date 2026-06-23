@@ -4,6 +4,7 @@ import type { ModuleState, RunStore } from './store.js';
 
 const SPINNER = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
 const BAR_WIDTH = 22;
+const MAX_ROWS = 12; // cap live rows so high concurrency doesn't flood the terminal
 
 function useSpinner(): string {
   const [frame, setFrame] = useState(0);
@@ -46,6 +47,7 @@ export function Dashboard({ store }: { store: RunStore }) {
   const passed = modules.filter((m) => m.status === 'pass').length;
   const failed = modules.filter((m) => m.status === 'fail').length;
   const settled = passed + failed;
+  const visible = running.slice(0, MAX_ROWS);
 
   return (
     <Box flexDirection="column">
@@ -61,9 +63,12 @@ export function Dashboard({ store }: { store: RunStore }) {
         {failed > 0 && <Text color="red"> · {failed} ✗</Text>}
         {running.length > 0 && <Text color="gray"> · {running.length} running</Text>}
       </Box>
-      {running.map((m) => (
+      {visible.map((m) => (
         <RunningRow key={m.id} m={m} spinner={spinner} />
       ))}
+      {running.length > visible.length && (
+        <Text color="gray"> … +{running.length - visible.length} more running</Text>
+      )}
     </Box>
   );
 }

@@ -1,6 +1,6 @@
 {
   "name": "@workspace/ai-testing",
-  "version": "3.2.0",
+  "version": "3.3.0",
   "description": "Standalone CLI eval runner for LangChain chains/agents. Define a module, run it, see a score table with below-threshold case dumps. Tracing is optional via ai-testing.config.ts.",
   "type": "module",
   "main": "./dist/index.js",
@@ -43,6 +43,7 @@
   },
   "dependencies": {
     "agentevals": "^0.0.7",
+    "async-sema": "^3.1.1",
     "chalk": "^5.4.1",
     "cli-table3": "^0.6.5",
     "commander": "^12.1.0",

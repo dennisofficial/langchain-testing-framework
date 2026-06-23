@@ -58,6 +58,4 @@ export interface EvalModule<In = any, Out = any> {
   evaluators: Evaluator<In, Out>[];
   /** Default threshold for metrics without their own; falls back to config default. */
   threshold?: number;
-  /** Max concurrent cases; falls back to config default (3). */
-  concurrency?: number;
 }

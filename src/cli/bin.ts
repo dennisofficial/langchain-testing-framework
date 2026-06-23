@@ -4,6 +4,7 @@ import { createRequire } from 'node:module';
 import { dirname, relative } from 'node:path';
 import process from 'node:process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { Sema } from 'async-sema';
 import chalk from 'chalk';
 import { Command } from 'commander';
 import { register } from 'tsx/esm/api';
@@ -11,7 +12,6 @@ import { printModuleReport, printRunSummary } from '../reporter/report.js';
 import { drainGlobalLogs } from '../runner/console-proxy.js';
 import type { ModuleResult } from '../runner/run-module.js';
 import { runModule } from '../runner/run-module.js';
-import { mapWithConcurrency } from '../runner/semaphore.js';
 import { discover, listAll } from './discover.js';
 import { findConfigPath, loadConfig, resolveTsconfig } from './load-config.js';
 import { loadModule } from './load-module.js';
@@ -19,7 +19,8 @@ import { mountDashboard } from './tui/dashboard.js';
 import { RunStore } from './tui/store.js';
 
 const TSX_SENTINEL = '__AI_TESTING_TSX';
-const DEFAULT_JOBS = 4;
+// Fallback global case concurrency when neither --concurrency nor ai-testing.config.ts sets it.
+const DEFAULT_CONCURRENCY = 12;
 
 /**
  * Loading project TypeScript (config + `.eval.ts`) that imports a CommonJS-typed backend
@@ -64,9 +65,9 @@ async function run(): Promise<number> {
     .description('Standalone eval runner for LangChain modules (.eval.ts).')
     .argument('[selectors...]', 'file-name substrings or paths to run')
     .option('-a, --all', 'run every discovered .eval.ts')
-    .option('-j, --jobs <n>', 'max modules to run in parallel', (v) => Number.parseInt(v, 10))
+    .option('-c, --concurrency <n>', 'max concurrent test cases across ALL modules (the rate-limit knob)', (v) => Number.parseInt(v, 10))
+    .option('-j, --jobs <n>', 'max modules open at once (default: --concurrency)', (v) => Number.parseInt(v, 10))
     .option('-t, --threshold <n>', 'override all metric thresholds (0..1)', (v) => Number.parseFloat(v))
-    .option('-c, --concurrency <n>', 'max concurrent cases per module', (v) => Number.parseInt(v, 10))
     .option('--tsconfig <path>', 'tsconfig used by the loader (alias/path resolution)')
     .option('--list', 'list discovered modules and exit')
     .option('--no-tui', 'disable the live dashboard (plain output)')
@@ -89,13 +90,15 @@ async function run(): Promise<number> {
   const root = configPath ? dirname(configPath) : cwd;
 
   const { config } = await loadConfig(cwd);
-  if (opts.concurrency && Number.isFinite(opts.concurrency)) {
-    config.defaults = { ...config.defaults, concurrency: opts.concurrency };
-  }
   if (opts.fail === false) config.defaults = { ...config.defaults, failOnBelowThreshold: false };
   const thresholdOverride =
     opts.threshold !== undefined && Number.isFinite(opts.threshold) ? opts.threshold : undefined;
-  const jobs = opts.jobs && opts.jobs > 0 ? opts.jobs : DEFAULT_JOBS;
+  // Global concurrent cases (the rate-limit knob). Modules open at `jobs` (default = it).
+  const concurrency =
+    opts.concurrency && opts.concurrency > 0
+      ? opts.concurrency
+      : (config.defaults?.concurrency ?? DEFAULT_CONCURRENCY);
+  const jobs = opts.jobs && opts.jobs > 0 ? opts.jobs : concurrency;
   const patterns = config.testMatch;
 
   if (opts.list) {
@@ -124,40 +127,53 @@ async function run(): Promise<number> {
   const dashboard = tui ? mountDashboard(store) : undefined;
 
   const loadErrors: Array<{ file: string; error: Error }> = [];
+  const caseSema = new Sema(concurrency);
+  const moduleSema = new Sema(jobs);
   let results: Array<ModuleResult | null> = [];
   try {
-    results = await mapWithConcurrency(files, jobs, async (file) => {
-      let mod;
-      try {
-        mod = await loadModule(file);
-      } catch (e) {
-        loadErrors.push({ file, error: e as Error });
-        store.fail(file);
-        return null;
-      }
-      store.rename(file, mod.name);
-      const result = await runModule(mod, {
-        config,
-        callbacks,
-        thresholdOverride,
-        onStart: (total) => store.start(file, total),
-        onCaseDone: () => store.tick(file),
-      });
-      store.finish(file, {
-        failed: result.failed,
-        metricsTotal: result.metrics.length,
-        metricsPassed: passedCount(result),
-      });
-      if (!tui) {
-        const tag = result.failed ? chalk.red('✗') : chalk.green('✓');
-        process.stderr.write(`  ${tag} ${mod.name} (${passedCount(result)}/${result.metrics.length})\n`);
-      }
-      return result;
-    });
+    results = await Promise.all(
+      files.map(async (file) => {
+        await moduleSema.acquire();
+        try {
+          let mod;
+          try {
+            mod = await loadModule(file);
+          } catch (e) {
+            loadErrors.push({ file, error: e as Error });
+            store.fail(file);
+            return null;
+          }
+          store.rename(file, mod.name);
+          const result = await runModule(mod, {
+            config,
+            callbacks,
+            sema: caseSema,
+            thresholdOverride,
+            onStart: (total) => store.start(file, total),
+            onCaseDone: () => store.tick(file),
+          });
+          store.finish(file, {
+            failed: result.failed,
+            metricsTotal: result.metrics.length,
+            metricsPassed: passedCount(result),
+          });
+          if (!tui) {
+            const tag = result.failed ? chalk.red('✗') : chalk.green('✓');
+            process.stderr.write(`  ${tag} ${mod.name} (${passedCount(result)}/${result.metrics.length})\n`);
+          }
+          return result;
+        } finally {
+          moduleSema.release();
+        }
+      }),
+    );
   } finally {
     if (dashboard) {
+      // NOTE: do NOT await waitUntilExit() — it does not resolve after a manual unmount()
+      // and would hang the process before the tables print. unmount() is synchronous; a
+      // single tick lets Ink flush its final frame before we print below it.
       dashboard.unmount();
-      await dashboard.waitUntilExit();
+      await new Promise((r) => setImmediate(r));
     }
     await config.teardown?.();
   }

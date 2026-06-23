@@ -19,7 +19,11 @@ export interface AIConfig {
   defaults?: {
     /** Metric average must be ≥ this unless overridden per-metric/per-module. Default 0.8. */
     threshold?: number;
-    /** Max concurrent cases per module. Default 3. */
+    /**
+     * Max concurrent test cases across ALL modules — the single knob that maps to provider
+     * rate limits (each case ≈ one chain call + its judges). Raise toward your tier's RPM.
+     * Overridable per-run with `--concurrency`. Default 12.
+     */
     concurrency?: number;
     /** Exit non-zero when a metric is below threshold. Default true. */
     failOnBelowThreshold?: boolean;

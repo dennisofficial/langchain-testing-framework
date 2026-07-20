@@ -13,7 +13,6 @@ function inspectValue(v: unknown): string {
   return inspect(v, { depth: 4, colors: false, maxStringLength: 800, breakLength: 100 });
 }
 
-/** Print one module's header + metric table, then dump below-threshold cases. */
 export function printModuleReport(result: ModuleResult, config: AIConfig): void {
   const evaluatorCount = new Set(result.metrics.map((m) => m.key)).size;
   const header = chalk.bgBlue.white.bold(` AI EVAL `);
@@ -104,7 +103,6 @@ function formatLogs(logs: CapturedLog[]): string {
     .join('\n');
 }
 
-/** Final cross-module summary line + the process exit verdict. */
 export function printRunSummary(results: ModuleResult[]): { failed: boolean } {
   const failedModules = results.filter((r) => r.failed);
   const totalMetrics = results.reduce((n, r) => n + r.metrics.length, 0);

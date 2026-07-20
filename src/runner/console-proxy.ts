@@ -44,12 +44,10 @@ export function restoreConsole(): void {
   }
 }
 
-/** Run `fn` so any console.* it triggers is attributed to `logs`. */
 export function withCaseCapture<T>(logs: CapturedLog[], fn: () => Promise<T>): Promise<T> {
   return als.run({ logs }, fn);
 }
 
-/** Drain logs emitted during a run but outside any case (printed after the TUI exits). */
 export function drainGlobalLogs(): CapturedLog[] {
   return globalBuffer.splice(0);
 }

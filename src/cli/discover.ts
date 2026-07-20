@@ -12,7 +12,6 @@ export interface DiscoverOptions {
 
 const DEFAULT_PATTERNS = ['**/*.eval.ts'];
 
-/** Every `.eval.ts` under the root (sorted), regardless of selectors. */
 export async function listAll(root: string, patterns?: string[]): Promise<string[]> {
   const files = await glob(patterns ?? DEFAULT_PATTERNS, {
     cwd: root,

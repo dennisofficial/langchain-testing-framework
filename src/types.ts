@@ -7,7 +7,6 @@
  * whose grade falls below its metric threshold.
  */
 
-/** One dataset row. `expected` is optional reference output (passed to evaluators). */
 export interface EvalCase<In, Out = unknown> {
   input: In;
   expected?: Out;
@@ -15,7 +14,6 @@ export interface EvalCase<In, Out = unknown> {
   label?: string;
 }
 
-/** A single graded metric for one case. `grade` is normalized to [0, 1]. */
 export interface EvalScore {
   key: string;
   grade: number;
@@ -25,7 +23,6 @@ export interface EvalScore {
   threshold?: number;
 }
 
-/** What an evaluator receives for each case. */
 export interface EvalContext<In, Out> {
   input: In;
   output: Out;
@@ -34,7 +31,6 @@ export interface EvalContext<In, Out> {
   index: number;
 }
 
-/** Return `[]` / `undefined` to skip a case (e.g. a scorer that targets one label). */
 export type EvaluatorReturn = EvalScore | EvalScore[] | number | boolean | void | null | undefined;
 
 export interface Evaluator<In = any, Out = any> {
@@ -43,7 +39,6 @@ export interface Evaluator<In = any, Out = any> {
   evalMeta?: { key: string; threshold?: number; kind: 'llm-judge' | 'scorer' | 'fn' };
 }
 
-/** Minimal structural contract satisfied by any LangChain `Runnable`. */
 export interface RunnableLike<In, Out> {
   invoke(input: In, config?: Record<string, unknown>): Promise<Out> | Out;
   withConfig?(config: Record<string, unknown>): RunnableLike<In, Out>;

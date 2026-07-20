@@ -23,7 +23,6 @@ export interface ScorerOptions<In, Out> {
     | Promise<number | boolean | EvalScore | EvalScore[] | void | null | undefined>;
 }
 
-/** Deterministic, programmatic evaluator. */
 export function scorer<In = any, Out = any>(opts: ScorerOptions<In, Out>): Evaluator<In, Out> {
   const { key, threshold, run } = opts;
 

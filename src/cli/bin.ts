@@ -104,7 +104,6 @@ async function checkModules(files: string[], root: string, jobs: number): Promis
   return failed ? 1 : 0;
 }
 
-/** Real work — runs in the child, where tsx is globally registered. */
 async function run(): Promise<number> {
   const program = new Command();
   program

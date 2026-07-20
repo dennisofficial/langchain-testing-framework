@@ -17,7 +17,6 @@ export interface LoadedConfig {
   configPath?: string;
 }
 
-/** Walk up from `cwd` looking for an ai-testing.config.* file. */
 export function findConfigPath(cwd: string): string | undefined {
   let dir = resolve(cwd);
   for (;;) {
@@ -44,7 +43,6 @@ export async function loadConfig(cwd: string): Promise<LoadedConfig> {
   return { config, root: dirname(configPath), configPath };
 }
 
-/** Resolve the tsconfig the loader should use for alias/path resolution. */
 export function resolveTsconfig(root: string, override?: string): string | undefined {
   if (override) return isAbsolute(override) ? override : resolve(root, override);
   const evalConfig = join(root, 'tsconfig.eval.json');

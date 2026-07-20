@@ -2,7 +2,6 @@ import { pathToFileURL } from 'node:url';
 import { defineModule } from '../define-module.js';
 import type { EvalModule } from '../types.js';
 
-/** Import a `.eval.ts` file (tsx must be registered) and validate its default export. */
 export async function loadModule(file: string): Promise<EvalModule> {
   const mod = await import(pathToFileURL(file).href);
   const def = mod.default ?? mod.module;

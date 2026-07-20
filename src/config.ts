@@ -5,7 +5,6 @@
  * end. Tracing is entirely optional — the package imports no tracing SDK.
  */
 
-/** LangChain `BaseCallbackHandler` instances. Typed loosely to avoid an SDK dependency. */
 export type TracingCallbacks = unknown[];
 
 export interface AIConfig {

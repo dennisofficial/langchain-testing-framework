@@ -78,7 +78,6 @@ export interface DashboardHandle {
   waitUntilExit: () => Promise<void>;
 }
 
-/** Mount the live dashboard. Returns a handle; call unmount() when the run is done. */
 export function mountDashboard(store: RunStore): DashboardHandle {
   // patchConsole:false — our console-proxy owns capture; Ink must not also patch it.
   const instance = render(<Dashboard store={store} />, { patchConsole: false });

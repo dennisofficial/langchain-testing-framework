@@ -1,6 +1,6 @@
 {
   "name": "@dltech/ai-testing",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Standalone CLI eval runner for LangChain chains/agents. Define a module, run it, see a score table with below-threshold case dumps. Tracing is optional via ai-testing.config.ts.",
   "license": "MIT",
   "author": "Dennis Lysenko",
@@ -92,6 +92,7 @@
   "devDependencies": {
     "@changesets/cli": "^2.31.1",
     "@langchain/core": "^1.1.39",
+    "@swc/core": "^1.15.47",
     "@types/node": "^20.19.0",
     "@types/react": "^18.3.12",
     "tsup": "^8.5.0",

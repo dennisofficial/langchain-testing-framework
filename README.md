@@ -1,4 +1,4 @@
-# @workspace/ai-testing
+# @dltech/ai-testing
 
 A standalone CLI **eval runner** for LangChain chains and agents. You write an *eval module*, run `ai-eval`, and get a live dashboard, a per-metric score table, and a dump of every case that scored below threshold — so you can actually see *how well* a chain performs, not just a green checkmark.
 
@@ -25,11 +25,8 @@ Vitest tells you *pass* or *fail*. An eval needs the number: `faithfulness = 66.
 
 ## Install
 
-It's a workspace package. Add it to the project you want to test from (e.g. a backend):
-
-```jsonc
-// package.json
-{ "dependencies": { "@workspace/ai-testing": "workspace:*" } }
+```bash
+pnpm add -D @dltech/ai-testing
 ```
 
 The CLI is exposed as the `ai-eval` bin:
@@ -47,19 +44,19 @@ pnpm exec ai-eval --list
 ### 1. `ai-testing.config.ts` (project root)
 
 ```ts
-import { defineConfig } from '@workspace/ai-testing/config';
+import { defineConfig } from '@dltech/ai-testing/config';
 
 export default defineConfig({
   // Runs once before any module loads — load env, warm caches, start a tracer.
   setup: async () => {
-    const { config } = await import('@dotenvx/dotenvx');
-    config({ path: '.env.test.enc', strict: true });
+    const { config } = await import('dotenv');
+    config({ path: '.env.test' });
   },
 
   // Optional. Return LangChain callbacks attached to every runnable.invoke. [] = no tracing.
   tracing: async () =>
     process.env.LANGFUSE_SECRET_KEY
-      ? [new (await import('@workspace/langfuse')).LangfuseCallbackHandler({ tags: ['ai-eval'] })]
+      ? [new (await import('langfuse-langchain')).CallbackHandler({ tags: ['ai-eval'] })]
       : [],
 
   defaults: {
@@ -76,7 +73,7 @@ export default defineConfig({
 A module wires a **dataset** through a **runnable** and grades the output with **evaluators**. Reuse whatever dataset you already have.
 
 ```ts
-import { defineModule, llmJudge, scorer } from '@workspace/ai-testing';
+import { defineModule, llmJudge, scorer } from '@dltech/ai-testing';
 import { makeSummarizer } from './summarizer';
 
 type In = { article: string };

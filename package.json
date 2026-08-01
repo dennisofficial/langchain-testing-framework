@@ -1,44 +1,75 @@
 {
-  "name": "@workspace/ai-testing",
-  "version": "3.4.0",
+  "name": "@dltech/ai-testing",
+  "version": "1.0.0-next.0",
   "description": "Standalone CLI eval runner for LangChain chains/agents. Define a module, run it, see a score table with below-threshold case dumps. Tracing is optional via ai-testing.config.ts.",
+  "license": "MIT",
+  "author": "Dennis Lysenko",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dennisofficial/langchain-testing-framework.git"
+  },
+  "homepage": "https://github.com/dennisofficial/langchain-testing-framework#readme",
+  "bugs": {
+    "url": "https://github.com/dennisofficial/langchain-testing-framework/issues"
+  },
+  "keywords": [
+    "langchain",
+    "testing",
+    "eval",
+    "evaluation",
+    "llm",
+    "agents",
+    "cli",
+    "ci",
+    "llm-judge",
+    "openevals",
+    "agentevals"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=20"
+  },
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
-  "types": "./src/index.ts",
+  "types": "./dist/index.d.ts",
   "bin": {
     "ai-eval": "./dist/cli/bin.js"
   },
   "exports": {
     ".": {
       "import": {
-        "types": "./src/index.ts",
+        "types": "./dist/index.d.ts",
         "default": "./dist/index.js"
       },
       "require": {
-        "types": "./src/index.ts",
+        "types": "./dist/index.d.cts",
         "default": "./dist/index.cjs"
       }
     },
     "./config": {
       "import": {
-        "types": "./src/config.ts",
+        "types": "./dist/config.d.ts",
         "default": "./dist/config.js"
       },
       "require": {
-        "types": "./src/config.ts",
+        "types": "./dist/config.d.cts",
         "default": "./dist/config.cjs"
       }
     },
     "./package.json": "./package.json"
   },
   "files": [
-    "dist",
-    "src"
+    "dist"
   ],
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
+    "changeset": "changeset",
+    "release": "changeset version",
+    "prepare": "pnpm build",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -59,13 +90,12 @@
     "@langchain/core": ">=1.0.0"
   },
   "devDependencies": {
+    "@changesets/cli": "^2.31.1",
     "@langchain/core": "^1.1.39",
     "@types/node": "^20.19.0",
     "@types/react": "^18.3.12",
     "tsup": "^8.5.0",
-    "typescript": "^5.7.0"
+    "typescript": "6.0.3"
   },
-  "engines": {
-    "node": ">=20"
-  }
+  "packageManager": "pnpm@11.18.0+sha512.33d83c77da82f49fba836925c6f1b841181ec3132b670639bd012f7075f5c7cf634c5f870147c19aae7478fac01df09d8892e880454896edd23ee9b33757563c"
 }

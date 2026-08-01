@@ -1,23 +1,37 @@
 {
   "compilerOptions": {
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext",
-    "target": "ES2022",
-    "lib": ["ES2023"],
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "resolvePackageJsonExports": true,
+    "esModuleInterop": true,
+    "isolatedModules": true,
     "declaration": true,
+    "removeComments": true,
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+    "allowSyntheticDefaultImports": true,
+    "target": "ES2023",
+    "lib": ["ES2023", "DOM"],
     "sourceMap": true,
     "outDir": "./dist",
-    "rootDir": "./src",
-    "strict": true,
-    "esModuleInterop": true,
+    "rootDir": ".",
+    "incremental": true,
     "skipLibCheck": true,
+    "strict": true,
+    "strictNullChecks": true,
     "forceConsistentCasingInFileNames": true,
-    "experimentalDecorators": true,
-    "emitDecoratorMetadata": true,
-    "resolveJsonModule": true,
+    "noImplicitAny": true,
+    "strictBindCallApply": true,
+    "noFallthroughCasesInSwitch": true,
+    // Ink components (src/cli/tui/dashboard.tsx) use the classic JSX transform — not part of
+    // the pgbase template, which has no .tsx sources.
     "jsx": "react",
-    "types": ["node"]
+    // Without an explicit "types" array, tsup's DTS bundler (rollup-plugin-dts) fails to pick
+    // up ambient Node globals (`node:*` specifiers, `NodeJS.*`, `setImmediate`) even though
+    // plain `tsc --noEmit` resolves them fine — pgbase's template omits this because it never
+    // hit the gap. Required here, not a style choice.
+    "types": ["node"],
   },
-  "include": ["src/**/*.ts"],
-  "exclude": ["node_modules", "dist"]
+  "include": ["src"],
+  "exclude": ["dist", "node_modules"],
 }

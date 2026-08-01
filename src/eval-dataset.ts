@@ -4,9 +4,9 @@ import type { EvaluatorResult, SimpleEvaluator } from 'openevals';
 export type { SimpleEvaluator } from 'openevals';
 
 /**
- * TRANSITIONAL. Ported verbatim from the previous `@workspace/ai-testing` so the existing
- * `*.ai.test.ts` vitest suites keep resolving while they migrate to `.eval.ts` modules.
- * Delete once the last suite is migrated (see plan Part C).
+ * TRANSITIONAL. Kept for backward compatibility with existing `*.ai.test.ts` vitest suites
+ * so they keep resolving while they migrate to `.eval.ts` modules. Delete once the last
+ * suite is migrated.
  */
 export interface EvalCase<In, Out = unknown> {
   input: In;

@@ -42,7 +42,7 @@ export interface AIConfig {
    *
    * Loader note: tsx resolves module files using `tsconfig.eval.json` (auto-detected next
    * to this config) or a `--tsconfig` flag — that's where path aliases such as
-   * `@workspace/shared` → the test stub live.
+   * `@your-org/shared` → the test stub live.
    */
   testMatch?: string[];
 }

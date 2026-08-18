@@ -13,8 +13,12 @@ export function defineModule<In, Out>(mod: EvalModule<In, Out>): EvalModule<In, 
   if (typeof mod.runnable !== 'function') {
     throw new Error(`defineModule(${mod.name}): \`runnable\` must be a function`);
   }
-  if (!Array.isArray(mod.evaluators) || mod.evaluators.length === 0) {
-    throw new Error(`defineModule(${mod.name}): \`evaluators\` must be a non-empty array`);
+  // An empty array is legal: a run-only module has no golden answer to grade against and
+  // exists to prove the chain still executes. It reports no metrics, so `run-module` fails it
+  // only when a case throws. Requiring an evaluator here would force authors to invent a
+  // constant one, which reports green while asserting nothing.
+  if (!Array.isArray(mod.evaluators)) {
+    throw new Error(`defineModule(${mod.name}): \`evaluators\` must be an array`);
   }
   return mod;
 }

@@ -18,6 +18,10 @@ export default defineConfig({
     index: 'src/index.ts',
     config: 'src/config.ts',
     'cli/bin': 'src/cli/bin.ts',
+    // Registered via `--import` as a Node loader hook, so it must be a real emitted file
+    // rather than bundled into bin.
+    'cli/swc-loader': 'src/cli/swc-loader.mts',
+    'cli/swc-hooks': 'src/cli/swc-hooks.mts',
   },
   format: ['esm', 'cjs'],
   target: 'node20',

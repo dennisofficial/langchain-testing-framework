@@ -41,9 +41,21 @@ function reExecUnderTsx(): Promise<number> {
   const env: NodeJS.ProcessEnv = { ...process.env, [TSX_SENTINEL]: '1' };
   if (tsconfig) env.TSX_TSCONFIG_PATH = tsconfig;
 
+  // Order matters. tsx is imported first so it owns `resolve` (tsconfig paths, extensionless
+  // specifiers, CJS interop); our SWC hook is imported second so it runs FIRST in the `load`
+  // chain and compiles TypeScript before tsx's esbuild can. See swc-loader.mts for why.
+  const swcLoader = new URL('./swc-loader.js', import.meta.url).href;
+
   const child = spawn(
     process.execPath,
-    ['--import', pathToFileURL(tsxLoader).href, self, ...process.argv.slice(2)],
+    [
+      '--import',
+      pathToFileURL(tsxLoader).href,
+      '--import',
+      swcLoader,
+      self,
+      ...process.argv.slice(2),
+    ],
     { stdio: 'inherit', env },
   );
   return new Promise((resolve) => {
@@ -77,15 +89,19 @@ async function checkModules(files: string[], root: string, jobs: number): Promis
             ? 'empty or non-array dataset'
             : !runnable || typeof runnable.invoke !== 'function'
               ? 'runnable() did not return something with .invoke()'
-              : !Array.isArray(mod.evaluators) || mod.evaluators.length === 0
-                ? 'no evaluators'
+              : !Array.isArray(mod.evaluators)
+                ? '`evaluators` is not an array'
                 : undefined;
         if (problem) {
           failed += 1;
           console.log(`  ${chalk.red('✗')} ${relative(root, file)} — ${problem}`);
         } else {
           console.log(
-            `  ${chalk.green('✓')} ${mod.name} ${chalk.dim(`(${dataset.length} cases, ${mod.evaluators.length} evaluators)`)}`,
+            `  ${chalk.green('✓')} ${mod.name} ${chalk.dim(
+              mod.evaluators.length === 0
+                ? `(${dataset.length} cases, run-only — no metrics)`
+                : `(${dataset.length} cases, ${mod.evaluators.length} evaluators)`,
+            )}`,
           );
         }
       } catch (e) {

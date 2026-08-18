@@ -1,5 +1,30 @@
 # @dltech/ai-testing
 
+## 1.1.0
+
+### Minor Changes
+
+- Compile eval modules with SWC so decorator metadata survives, and allow run-only modules.
+
+  **Decorator metadata.** Modules were loaded through tsx, which compiles with esbuild — an ES
+  decorators implementation that never emits `design:type`. Any project whose decorators read that
+  metadata (Mongoose `@Prop`, NestJS DI, class-validator, `@dltech/nestjs-langchain`'s `@AiString` /
+  `@AiToolCall`) threw `TypeError` at `Reflect.getMetadata` the moment a module was imported, which
+  surfaced as errors like `Cannot determine a type for the "X.code" field`. TypeScript sources are
+  now compiled by SWC with `legacyDecorator` + `decoratorMetadata`. tsx stays registered and still
+  owns resolution, so tsconfig `paths` and extensionless specifiers behave as before.
+
+  ESM and CommonJS are handled separately and deliberately: the ESM `load` hook returns transformed
+  source only for ES modules, and hands CommonJS back to Node's own CJS loader where a
+  require-extension compiles it. Returning source for `format: 'commonjs'` routes the file through
+  Node's ESM→CJS translator, whose `require` is not fully wired, and any dependency it pulls in fails
+  with `Cannot read properties of undefined (reading 'exports')`.
+
+  **Run-only modules.** `evaluators: []` is now valid. A module with no golden answer exists to prove
+  its chain still executes; it reports no metrics and fails only when a case throws. Rejecting it
+  forced authors to invent a constant evaluator, which reports green while asserting nothing.
+  `--check` and the run summary label these `run-only — no metrics`.
+
 ## 1.0.1
 
 ### Patch Changes

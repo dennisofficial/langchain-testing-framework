@@ -1,5 +1,30 @@
 # @dltech/ai-testing
 
+## 1.2.0
+
+### Minor Changes
+
+- Expose the tracing callbacks to evaluators as `EvalContext.callbacks`.
+
+  An evaluator that builds its own chain — an LLM judge, typically — had no way to reach the
+  callbacks from `config.tracing()`. Those are attached to the module's `runnable`, but a chain
+  constructed inside an evaluator is invoked directly, so its spans were orphaned: the judge ran
+  untraced, and the reasoning behind a low score was unavailable precisely when it mattered.
+
+  Evaluators now receive `callbacks` alongside `input`/`output`/`expected`/`label`/`index`:
+
+  ```ts
+  async ({ output, expected, callbacks }) => {
+    const judged = await JudgeChain()
+      .withConfig({ callbacks })
+      .invoke({ output, expected });
+    return { key: "faithfulness", grade: judged.grade, comment: judged.reason };
+  };
+  ```
+
+  Same array the runnable receives, empty when `config.tracing` is unset, so spreading it into
+  `withConfig` is always safe. Purely additive — existing evaluators are unaffected.
+
 ## 1.1.0
 
 ### Minor Changes

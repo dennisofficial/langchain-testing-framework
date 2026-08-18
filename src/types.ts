@@ -1,3 +1,4 @@
+import type { BaseCallbackHandler } from '@langchain/core/callbacks/base';
 /**
  * Core types for the standalone eval runner.
  *
@@ -29,6 +30,19 @@ export interface EvalContext<In, Out> {
   expected?: Out;
   label?: string;
   index: number;
+  /**
+   * The tracing callbacks from `config.tracing()`, the same ones attached to the module's
+   * runnable. Pass them to any chain an evaluator builds itself — an LLM judge, most often —
+   * so its spans land under the same trace instead of disappearing:
+   *
+   *   ({ output, callbacks }) => JudgeChain().withConfig({ callbacks }).invoke({ output })
+   *
+   * Empty when `config.tracing` is unset, so passing it through is always safe.
+   *
+   * Typed as LangChain's handler array rather than `unknown[]` so it drops straight into
+   * `withConfig({ callbacks })` — the one thing it is for — without a cast at the call site.
+   */
+  callbacks: BaseCallbackHandler[];
 }
 
 export type EvaluatorReturn = EvalScore | EvalScore[] | number | boolean | void | null | undefined;

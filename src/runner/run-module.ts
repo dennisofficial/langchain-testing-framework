@@ -1,3 +1,4 @@
+import type { BaseCallbackHandler } from '@langchain/core/callbacks/base';
 import type { AIConfig } from '../config.js';
 import type { EvalCase, EvalModule, EvalScore, Evaluator } from '../types.js';
 import { type CapturedLog, installConsoleCapture, restoreConsole, withCaseCapture } from './console-proxy.js';
@@ -34,7 +35,7 @@ export interface ModuleResult {
 
 export interface RunModuleOptions {
   config: AIConfig;
-  callbacks?: unknown[];
+  callbacks?: BaseCallbackHandler[];
   /** Shared global case limiter — caps total in-flight cases across ALL modules. */
   sema: Sema;
   /** From `--threshold`; overrides every metric's threshold when set. */
@@ -101,6 +102,9 @@ export async function runModule<In, Out>(
               expected: caseDef.expected,
               label: caseDef.label,
               index,
+              // Exposed so an evaluator that builds its own chain (an LLM judge) can attach
+              // the same tracing the runnable got. Without this its spans are orphaned.
+              callbacks: callbacks ?? [],
             };
             const perEvaluator = await Promise.all(
               mod.evaluators.map(async (ev) => {

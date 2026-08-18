@@ -1,3 +1,4 @@
+import type { BaseCallbackHandler } from '@langchain/core/callbacks/base';
 import 'reflect-metadata';
 import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
@@ -192,7 +193,7 @@ async function run(): Promise<number> {
     }
   }
 
-  const callbacks = (await config.tracing?.()) ?? [];
+  const callbacks = ((await config.tracing?.()) ?? []) as BaseCallbackHandler[];
 
   const tui = Boolean(process.stdout.isTTY) && opts.tui !== false;
   const store = new RunStore();

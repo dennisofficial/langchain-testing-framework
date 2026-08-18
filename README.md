@@ -178,6 +178,23 @@ scorer({
 ({ output }) => ({ key: 'non-empty', grade: output.text ? 1 : 0 });
 ```
 
+Every evaluator receives `{ input, output, expected, label, index, callbacks }`.
+
+**`callbacks` — tracing your own chains.** When an evaluator builds a chain of its own, usually
+an LLM judge, attach `callbacks` so its spans land under the same trace as the case that
+produced them. Without it the judge runs untraced and you lose the reasoning behind a low score
+exactly when you want to read it.
+
+```ts
+async ({ output, expected, callbacks }) => {
+  const judged = await JudgeChain().withConfig({ callbacks }).invoke({ output, expected });
+  return { key: 'faithfulness', grade: judged.grade, comment: judged.reason };
+};
+```
+
+These are the same callbacks `config.tracing()` returns and the module's runnable already gets.
+Typed as LangChain's `BaseCallbackHandler[]`, so it drops straight into `withConfig` with no cast. Empty when `tracing` is unset, so it is always safe to pass.
+
 ### Scoring & thresholds
 
 - Each evaluator runs on every case; grades are averaged **per metric key**.

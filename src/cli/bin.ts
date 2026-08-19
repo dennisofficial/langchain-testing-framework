@@ -272,10 +272,49 @@ async function run(): Promise<number> {
   return hasErrors || (failOnBelow && hasBelow) ? 1 : 0;
 }
 
+/**
+ * Neutralise `process.exit()` for the duration of a run.
+ *
+ * Eval modules sometimes call it to escape a resource that keeps the event loop alive — a Mongo
+ * connection, most often. That was harmless when a module owned the whole process. Under `--all`
+ * they share one, so the first module to finish kills every other module mid-flight and the run
+ * exits 0 with a truncated report: a silent pass that skipped most of the suite.
+ *
+ * The attempts are reported rather than swallowed, because a module reaching for `process.exit`
+ * is still evidence of a handle nothing closed. The CLI exits on its own terms once the summary
+ * is printed, which is what made those calls unnecessary in the first place.
+ */
+function guardProcessExit(): () => void {
+  const real = process.exit.bind(process);
+  let attempts = 0;
+  process.exit = ((code?: number) => {
+    attempts += 1;
+    void code;
+    return undefined as never;
+  }) as typeof process.exit;
+
+  return () => {
+    process.exit = real;
+    if (attempts > 0) {
+      console.log(
+        chalk.yellow(
+          `\n⚠ ignored ${attempts} process.exit() call(s) from eval modules — ` +
+            'under --all that would have truncated the run. Close the handle instead.',
+        ),
+      );
+    }
+  };
+}
+
+const restoreProcessExit = process.env[TSX_SENTINEL] ? guardProcessExit() : () => {};
 const entry = process.env[TSX_SENTINEL] ? run() : reExecUnderTsx();
 entry
-  .then((code) => process.exit(code))
+  .then((code) => {
+    restoreProcessExit();
+    process.exit(code);
+  })
   .catch((err) => {
+    restoreProcessExit();
     console.error(chalk.red('ai-eval crashed:'), err);
     process.exit(1);
   });

@@ -1,5 +1,22 @@
 # @dltech/ai-testing
 
+## 1.2.1
+
+### Patch Changes
+
+- Ignore `process.exit()` calls from eval modules during a run.
+
+  Modules sometimes call it to escape a resource that keeps the event loop alive — a database
+  connection, most often. Harmless when a module owned the whole process; fatal under `--all`, where
+  they share one: the first module to finish killed every other module mid-flight, and the CLI exited
+  **0** with a truncated report. A run that silently skipped most of the suite looked exactly like a
+  passing one.
+
+  `process.exit` is now neutralised for the duration of the run and restored before the CLI exits on
+  its own terms, which it already did once the summary was printed — making those calls unnecessary
+  in the first place. Attempts are reported rather than swallowed, since reaching for `process.exit`
+  is still evidence of a handle nothing closed.
+
 ## 1.2.0
 
 ### Minor Changes
